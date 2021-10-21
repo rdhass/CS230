@@ -1,4 +1,5 @@
-
+import sys
+sys.path.insert(0,'/Users/ryanhass/Documents/MATLAB/CS_230/Final_project/utilities')
 import numpy as np
 import code
 import tensorflow.compat.v1 as tf
