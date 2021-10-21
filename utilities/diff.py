@@ -15,6 +15,7 @@ from numpy import pi
 from scipy.fft import fft, ifft, fftshift
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import splu
+import sys
 
 import matplotlib.pyplot as plt
 
@@ -94,8 +95,8 @@ class DiffOps:
 
 
 
-def test():
-    NX, NY, NZ = 256, 128, 64
+def test(NX = 256, NY = 128, NZ = 64):
+    #NX, NY, NZ = 256, 128, 64
     dz = 1.0 / NZ
     x = np.linspace(0, 4*pi, num=NX, endpoint=False)
     y = np.linspace(0, 2*pi, num=NY, endpoint=False)
@@ -117,13 +118,24 @@ def test():
     diff = DiffOps(NX, NY, NZ)
 
     fxn[:] = diff.ddx(f)
-    print("Error dfdx: {:.5E}".format(np.max(np.abs(fxe-fxn))))
+    print("Linf error dfdx: {:.5E}".format(np.max(np.abs(fxe-fxn))))
 
     fyn[:] = diff.ddy(f)
-    print("Error dfdy: {:.5E}".format(np.max(np.abs(fye-fyn))))
+    print("Linf error dfdy: {:.5E}".format(np.max(np.abs(fye-fyn))))
 
     fzn[:] = diff.ddz(f)
-    print("Error dfdz: {:.5E}".format(np.max(np.abs(fze-fzn))))
+    print("Linf error dfdz: {:.5E}".format(np.max(np.abs(fze-fzn))))
+
+    print("L2 error dfdz: {:.5E}".format(np.linalg.norm(fze-fzn)))
 
 if __name__ == '__main__':
-    test()
+    if len(sys.argv) < 4:
+        print("Can specify grid resolution via:")
+        print("   python3 diff.py <NX> <NY> <NZ>")
+        print("---------------------------------")
+        print("Using default domain size instead: 256 X 128 X 64")
+        test()
+    else:
+        NX, NY, NZ = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
+        print("Domain size: {} X {} X {}".format(NX, NY, NZ))
+        test(NX = NX, NY = NY, NZ = NZ)
