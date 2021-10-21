@@ -1,5 +1,4 @@
 import numpy as np
-import numpy.matlib as mat
 from scipy.fft import fft, ifft, fftshift
 
 def __Fourier_coll__(f,dim,h):
@@ -23,7 +22,19 @@ def __Fourier_coll__(f,dim,h):
     return fprime
 
 def ddx(f,dx):
-    dfdx = __Fourier_coll__(f,0,dx)
+    #dfdx = __Fourier_coll__(f,0,dx)
+    nx, ny, nz = np.shape(f)
+
+    Nf = np.float64(nx)
+    k1 = fftshift( np.multiply( np.arange(-Nf/2., Nf/2., 1., \
+            dtype = np.float64), 2.*np.pi/(Nf*dx) ) )
+    k1 = k1.reshape(k1.size,1)
+    kx = np.matlib.repmat(k1,1,ny)
+
+    fhat = fft(f, axis = 0)
+    for kk in range(nz):
+        fhat[:,:,kk] = np.multiply(1j*kx,fhat[:,:,kk])
+    dfdy = np.real(ifft(fhat,axis = 0))
     return dfdx
 
 def ddy(f,dy):
@@ -34,7 +45,7 @@ def ddy(f,dy):
     k2 = fftshift( np.multiply( np.arange(-Nf/2., Nf/2., 1., \
             dtype = np.float64), 2.*np.pi/(Nf*dy) ) )
     k2 = k2.reshape(1,k2.size)
-    ky = mat.repmat(k2,nx,1)
+    ky = np.matlib.repmat(k2,nx,1)
 
     fhat = fft(f, axis = 1)
     for kk in range(nz):
