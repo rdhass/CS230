@@ -3,24 +3,13 @@ sys.path.insert(0,'/Users/ryanhass/Documents/MATLAB/CS_230/Final_project/utiliti
 #from derivative_operators import ddx, ddy
 from diff import DiffOps
 import numpy as np
-
-def setup_domain(A,B,C,nx,ny,nz):
-    coefs = [A, B, C]
-    Lx, Ly, Lz = tuple([2.*np.pi*i for i in coefs])
-    nxf, nyf, nzf = np.float64((nx,ny,nz))
-    dx, dy, dz = (Lx/nxf, Ly/nyf, Lz/nzf)
-    
-    x = np.arange(0.,Lx, dx)
-    y = np.arange(0.,Ly, dy)
-    z = np.arange(0.,Lz, dz)
-
-    xmesh, ymesh, zmesh = np.meshgrid(x, y, z, indexing='ij')
-
-    return Lx, Ly, Lz, dx, dy, dz, xmesh, ymesh, zmesh
+from domain_setup import setup_domain
 
 def test_ddx(A,B,C,nx,ny,nz):
     # Define spatial domain
-    Lx, Ly, Lz, dx, dy, dz, xmesh, ymesh, zmesh = setup_domain(A,B,C,nx,ny,nz)
+    coefs = [A, B, C]
+    Lx, Ly, Lz = tuple([2.*np.pi*i for i in coefs])
+    dx, dy, dz, xmesh, ymesh, zmesh = setup_domain(Lx,Ly,Lz,nx,ny,nz)
 
     xcos = np.cos(xmesh)
     xsin = np.sin(xmesh)
