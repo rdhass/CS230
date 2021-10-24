@@ -150,8 +150,8 @@ if __name__ == '__main__':
         tauij[:,:,:,4] = np.array(ds["tau23"][:,:,:])
         tauij[:,:,:,5] = np.array(ds["tau33"][:,:,:])
         return u, v, w, p, tauij
-    
-    fname = '/Users/ryanhass/Documents/MATLAB/CS_230/DNS_test_data.h5'
+   
+    fname = input("Provide location of test data for L_mom test")
     u, v, w, p, tauij = read_test_data(fname)
     print(u.shape)
     print(v.shape)
