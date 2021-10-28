@@ -9,7 +9,7 @@ from scipy import interpolate
 import sys
 
 class Loss:
-    def __init__(self,nzF,nzC,Lz,fname):
+    def __init__(self,nzF,nxC,nyC,nzC,Lx,Ly,Lz,fname):
         # Inputs:
         #   nzF   --> the number of grid points in z for the "Fine" grid
         #   nzC   --> the number of grid points in z for the "Course" grid
@@ -39,6 +39,9 @@ class Loss:
                 "tau13_mod":avgC[:,13], "tau22_mod":avgC[:,19],\
                 "tau23_mod":avgC[:,14], "tau33_mod":avgC[:,20]}
 
+        # initialize derivative operator
+        self.dop = DiffOps(nx = nxC, ny = nyC, nz = nzC, Lx = Lx, Ly = Ly, Lz = Lz)
+
     def mean_square(f):
         mean_sq = np.mean(np.power(f,2.))
         return mean_sq
@@ -61,7 +64,7 @@ class Loss:
                 uprime[i,j,:] = u[i,j,:] - uAvg
         return uprime
     
-    def extract_field_variables_from_input_layer(X, nx, ny, nz, inc_prss = True):
+    def extract_field_variables_from_input_layer(self,X, nx, ny, nz, inc_prss = True):
         if inc_prss:
             X = X.reshape(nx, ny, nz, 4, order = 'F')
             p = X[:,:,:,3]
@@ -73,7 +76,7 @@ class Loss:
         w = X[:,:,:,2]
         return u, v, w, p
     
-    def extract_3Dfields_from_output_layer(Y, nx, ny, nz, inc_tauij = True):
+    def extract_3Dfields_from_output_layer(self,Y, nx, ny, nz, inc_tauij = True):
         if inc_tauij:
           Y = Y.reshape(nx, ny, nz, 10, order = 'F')
           tauij = Y[:,:,:,:6]
@@ -86,17 +89,10 @@ class Loss:
           B = Y[:,:,:,3]
         return tauij, A, B
     
-    def L_mass(u,v,w,A,dop,nx,ny,nz):
-        A1u = np.multiply(A[:,:,:,0],u)
-        A2v = np.multiply(A[:,:,:,1],v)
-        A3w = np.multiply(A[:,:,:,2],w)
-        L_mass = mean_square(dop.ddx(A1u) + dop.ddy(A2v) + dop.ddz(A3w))
-        print(mean_square(dop.ddx(u)))
-        print(mean_square(dop.ddy(v)))
-        print(mean_square(dop.ddz(w)))
-        return L_mass
+    def L_mass(self,u,v,w):
+        return mean_square(self.dop.ddx(u) + self.dop.ddy(v) + self.dop.ddz(w))
     
-    def L_mom(u,v,w,p,tauij,A,B,dop,nx,ny,nz):
+    def L_mom(self,u,v,w,p,tauij):
         # Compute the residual of the pressure Poisson equations
         
         # tauij[:,:,:,0] --> tau_11
@@ -105,51 +101,60 @@ class Loss:
         # tauij[:,:,:,3] --> tau_22
         # tauij[:,:,:,4] --> tau_23
         # tauij[:,:,:,5] --> tau_33
-        tauij, A, B = extract_3Dfields_from_output_layer(Y,nx,ny,nz)
-        A1u = np.multiply(A[:,:,:,0],u)
-        A2v = np.multiply(A[:,:,:,1],v)
-        A3w = np.multiply(A[:,:,:,2],w)
-        Bp  = np.multiply(B,p)
     
-        Intertial_term = dop.ddx(dop.ddx( np.multiply(A1u,A1u) ) ) +\
-                      2.*dop.ddx(dop.ddy( np.multiply(A1u,A2v) ) ) +\
-                      2.*dop.ddx(dop.ddz( np.multiply(A1u,A3w) ) ) +\
-                         dop.ddy(dop.ddy( np.multiply(A2v,A2v) ) ) +\
-                      2.*dop.ddy(dop.ddz( np.multiply(A2v,A3w) ) ) +\
-                         dop.ddz(dop.ddz( np.multiply(A3w,A3w) ) )
-        Pressure_term = dop.ddx(dop.ddx(Bp)) + dop.ddy(dop.ddy(Bp)) + dop.ddz(dop.ddz(Bp))
-        Stress_term   = dop.ddx(dop.ddx(tauij[:,:,:,0])) + \
-                     2.*dop.ddx(dop.ddy(tauij[:,:,:,1])) + \
-                     2.*dop.ddx(dop.ddz(tauij[:,:,:,2])) + \
-                        dop.ddy(dop.ddy(tauij[:,:,:,3])) + \
-                     2.*dop.ddy(dop.ddz(tauij[:,:,:,4])) + \
-                        dop.ddz(dop.ddz(tauij[:,:,:,5]))     
+        Intertial_term = self.dop.ddx(self.dop.ddx( np.multiply(u,u) ) ) +\
+                      2.*self.dop.ddx(self.dop.ddy( np.multiply(u,v) ) ) +\
+                      2.*self.dop.ddx(self.dop.ddz( np.multiply(u,w) ) ) +\
+                         self.dop.ddy(self.dop.ddy( np.multiply(v,v) ) ) +\
+                      2.*self.dop.ddy(self.dop.ddz( np.multiply(v,w) ) ) +\
+                         self.dop.ddz(self.dop.ddz( np.multiply(w,w) ) )
+        Pressure_term = self.dop.ddx(self.dop.ddx(Bp)) + \
+                self.dop.ddy(self.dop.ddy(Bp)) + self.dop.ddz(self.dop.ddz(Bp))
+        Stress_term   = self.dop.ddx(self.dop.ddx(tauij[:,:,:,0])) + \
+                     2.*self.dop.ddx(self.dop.ddy(tauij[:,:,:,1])) + \
+                     2.*self.dop.ddx(self.dop.ddz(tauij[:,:,:,2])) + \
+                        self.dop.ddy(self.dop.ddy(tauij[:,:,:,3])) + \
+                     2.*self.dop.ddy(self.dop.ddz(tauij[:,:,:,4])) + \
+                        self.dop.ddz(self.dop.ddz(tauij[:,:,:,5]))     
     
-        L_mom = mean_square(Intertial_term + Pressure_term + Stress_term)
-        return L_mom
+        return mean_square(Intertial_term + Pressure_term + Stress_term)
     
-    def L_U(self,A1u,ground_truth):
-        Utrue = self.ground_truth["meanU"]
-        uML = xy_avg(A1u)
-        return MSE(Utrue,uML)
+    def L_U(self,u):
+        U_GT = self.ground_truth["meanU"]
+        U_ML = xy_avg(u)
+        return MSE(U_GT,U_ML)
     
-    def L_uiuj(A1u,A2v,A3w,uiuj_true):
-        inputs = {"u1":A1u,"u2":A2v,"u3":A3w}
+    def L_uiuj(self,u,v,w):
+        inputs = {"u1":u,"u2":v,"u3":w}
         for i in range(3):
             for j in range(3):
                 if i <= j:
-                    f_true = ground_truth["u"+str(i)+"u"+str(j)]
+                    uiujGT = ground_truth["u"+str(i)+"u"+str(j)]
                     uiujML = xy_avg(np.multiply(fluct(inputs["u"+str(i)]),\
                             fluct(inputs["u"+str(j)]) ) )
-                    L_uiuj += MSE()
+                    L_uiuj += MSE(uiujGT,uiujML)
         return L_uiuj
     
-    def compute_loss(X,Y,dop,nx,ny,nz,lambda_p = 0.5, inc_mom = True):
-        u, v, w, p  = extract_field_variables_from_input_layer(X,nx,ny,nz)
-        tauij, A, B = extract_3Dfields_from_output_layer(Y,nx,ny,nz)
-        Lphys = L_mass(u,v,w,A,dop,nx,ny,nz)
+    def modify_fields(self, u, v, w, p, A, B):
+        u = np.multiply(A[:,:,:,0],u)
+        v = np.multiply(A[:,:,:,1],v)
+        w = np.multiply(A[:,:,:,2],w)
+        p = np.multiply(B,p)
+        return u, v, w, p
+
+    def compute_loss(self,X,Y,nx,ny,nz,lambda_p = 0.5, inc_mom = True):
+        # Step 1: Extract data and apply scaling, e.g. u -> Au
+        u, v, w, p  = self.extract_field_variables_from_input_layer(X,nx,ny,nz)
+        tauij, A, B = self.extract_3Dfields_from_output_layer(Y,nx,ny,nz)
+        A1u, A2v, A3w, Bp = self.modify_fields(u, v, w, p, A, B)
+
+        # Compute loss functions
+        Lphys = self.L_mass(A1u,A2v,A3w)
+        Lcontent = self.L_uiuj(A1u,A2v,A3w) + self.L_U(A1u) # + self.L_P(Bp)
         if inc_mom:
-            Lphys += L_mom(u,v,w,p,tauij,A,B,dop,nx,ny,nz)
+            Lphys += self.L_mom(A1u,A2v,A3w,Bp,tauij)
+            #Lcontent += self.L_tauij(...)
+
         return None
 
 def read_test_data(fname):
