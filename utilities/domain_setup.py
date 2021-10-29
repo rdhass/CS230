@@ -1,6 +1,8 @@
 import numpy as np
+from numpy import pi
 
-def setup_domain(Lx,Ly,Lz,nx,ny,nz,zPeriodic = False):
+def setup_domain(Lx = 2.*pi, Ly = 2.*pi, Lz = 2.*pi, nx = 32, ny = 32, nz = 32, \
+        zPeriodic = False):
     nxf, nyf, nzf = np.float64((nx,ny,nz))
     dx, dy, dz = (Lx/nxf, Ly/nyf, Lz/nzf)
     
@@ -13,4 +15,4 @@ def setup_domain(Lx,Ly,Lz,nx,ny,nz,zPeriodic = False):
 
     xmesh, ymesh, zmesh = np.meshgrid(x, y, z, indexing='ij')
 
-    return dx, dy, dz, xmesh, ymesh, zmesh
+    return dx, dy, dz, x, y, z, xmesh, ymesh, zmesh

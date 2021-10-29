@@ -52,7 +52,7 @@ class DiffOps:
         B[ 2, [ 0, 1, 3, 4]] = [-3./127.*idz, -393./508.*idz, 393./508.*idz, 3./127.*idz]
         B[-3, [-5,-4,-2,-1]] = [-3./127.*idz, -393./508.*idz, 393./508.*idz, 3./127.*idz]
 
-        for i in range(2, nz-2):
+        for i in range(3, nz-3):
             A[i, [i-1, i, i+1]] = [1./3., 1.0, 1./3.]
             B[i, [i-2, i-1, i+1, i+2]] = [-1./36.*idz, -7./9.*idz, 7./9.*idz, 1./36.*idz]
         
@@ -126,7 +126,7 @@ def test(NX = 256, NY = 128, NZ = 64):
     fzn[:] = diff.ddz(f)
     print("Linf error dfdz: {:.5E}".format(np.max(np.abs(fze-fzn))))
 
-    print("L2 error dfdz: {:.5E}".format(np.linalg.norm(fze-fzn)))
+    print("L2 error dfdz: {:.5E}".format(np.sqrt(np.sum((fze-fzn)**2)/NZ)))
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
