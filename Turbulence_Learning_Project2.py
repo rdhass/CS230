@@ -74,6 +74,9 @@ class NN_model:
         # Initiate the graph
         self.Graph1 = tf.Graph()
 
+        # Initiate the loss function object
+        self.Loss = Loss(nzF,192,192,64,6.*pi,3.*pi,1.,fname)
+
         # Define our network in this graph
         with self.Graph1.as_default():
 
@@ -361,30 +364,45 @@ class NN_model:
 
 
 
-
-
-
-
 if __name__ == "__main__":
     
+    if len(sys.argv) < 2:
+        print("Usage: ")
+        print("  python3 Turbulence_Learning_Project2.py <nzF>")
+        exit(0)
+    nzF = sys.argv[1]
+
     # Reverting to TensorFlow version 1
     tf.disable_v2_behavior()
     
     # File path from code to data directory
     data_directory = "Finger_Number_Data/"
 
-    # Load the data (this uses a function already written from CS230)
-    X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)
+    # Define the low and high resolution computational domains (we actually only need the z-vectors)
+    _, _, _, _, _, zF, _, _, _ = setup_domain(Lz = 1., nz = nzF)
+    _, _, _, _, _, zC, _, _, _ = setup_domain(Lz = 1., nz = 64)
 
+    # Load the data (this uses a function already written from CS230)
+    #X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)
+    X_train_orig, Y_train_orig, X_test_orig, Y_test_orig = \
+            load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
+            x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
+            inc_prss = False, nsteps_avg = 3020)
+
+    #*** NOTE: load_dataset_V2 returns flattened data ***
+    
     # Flatten the training and test images
-    X_train_flatten = X_train_orig.reshape(X_train_orig.shape[0], -1).T
-    X_test_flatten = X_test_orig.reshape(X_test_orig.shape[0], -1).T
+    #X_train_flatten = X_train_orig.reshape(X_train_orig.shape[0], -1).T
+    #X_test_flatten = X_test_orig.reshape(X_test_orig.shape[0], -1).T
+    
     # Normalize image vectors
-    X_train = X_train_flatten/255.
-    X_test = X_test_flatten/255.
+    # TODO: Properly normalize the data
+    #X_train = X_train_flatten/255.
+    #X_test = X_test_flatten/255.
+    
     # Convert training and test labels to one hot matrices
-    Y_train = convert_to_one_hot(Y_train_orig, 6)
-    Y_test = convert_to_one_hot(Y_test_orig, 6)
+    #Y_train = convert_to_one_hot(Y_train_orig, 6)
+    #Y_test = convert_to_one_hot(Y_test_orig, 6)
 
 
 

@@ -10,76 +10,38 @@ import sys
 from time import time
 
 class Loss:
-    def __init__(self,nzF,nxC,nyC,nzC,Lx,Ly,Lz,fname):
+    def __init__(self,nx,ny,nz,Lx,Ly,Lz):
         # Inputs:
-        #   nxF, nyf, nzF --> the number of grid points in domain for "Fine" grid
-        #   nxC, nyC, nzC --> the number of grid points in domain "Course" grid
+        #   nx, ny, nz --> the number of grid points in domain "Course" grid
         #   Lx, Ly, Lz    --> Domain size in the "i"-dimension
-        #   fname         --> file path and name of the mean profiles 
 
         # Defined the z-axis
         _, _, _, _, _, zF, _, _, _     = setup_domain(Lz = Lz, nz = nzF)
         zF = zF.reshape([nzF,1])
         _, _, _, _, _, self.z, _, _, _ = setup_domain(Lx = Lx, Ly = Ly, Lz = Lz, \
-                nx = nxC, ny = nyC, nz = nzC)
-        self.z = self.z.reshape([nzC,1])
-        self.nx, self.ny, self.nz = nxC, nyC, nzC
+                nx = nx, ny = ny, nz = nz)
+        self.z = self.z.reshape([nz,1])
+        self.nx, self.ny, self.nz = nx, ny, nz
 
-        # Read in average profiles from disk
-        avgF = np.genfromtxt(fname,dtype = np.float64)
-
-        # Interpolate the average profiles to the self.z locations
-        avgC = np.zeros((nzC,avgF.shape[1]))
-        for i in range(avgF.shape[1]):
-            tck = interpolate.splrep(zF, avgF[:,i], s=0)
-            avgC[:,i] = interpolate.splev(np.squeeze(self.z), tck, der=0)
-
-        # Define the ground-truth from the interpolated values
+        # Initialize the ground truth dictionary
         self.ground_truth = {}
-
-        # disk-data term indices:
-        # 0:  <U>
-        # 1:  <V>
-        # 2:  <T>
-        # 3:  <uu>
-        # 4:  <uv>
-        # 5:  <uw>
-        # 6:  <vv>
-        # 7:  <vw>
-        # 8:  <ww>
-        # 9:  <uT>
-        # 10: <vT>
-        # 11: <wT>
-        # 12: <TT>
-        # 13: <tau13>
-        # 14: <tau23>
-        # 15: <q3>
-        # 16: <P>
-        # 17: <tau11>
-        # 18: <tau12>
-        # 19: <tau22>
-        # 20: <tau33> 
-        keys = ("meanU","u1u1","u1u2","u1u3","u2u2","u2u3","u3u3",\
+        self.ground_truth_keys = ("meanU","u1u1","u1u2","u1u3","u2u2","u2u3","u3u3",\
                 "tau11_mod","tau12_mod","tau13_mod","tau22_mod",\
                 "tau23_mod","tau33_mod","meanP")
-        indices = (0,3,4,5,6,7,8,\
-                   17,18,13,19,\
-                   14,20,16)
-
-        for i, key in enumerate(keys):
-            self.ground_truth[key] = avgC[:,indices[i]]
+        for i, key in enumerate(self.ground_truth_keys):
+            self.ground_truth[key] = np.empty((nz,1), dtype = np.float64, order = 'F')
 
         # initialize derivative operator
-        self.dop = DiffOps(nx = nxC, ny = nyC, nz = nzC, Lx = Lx, Ly = Ly, Lz = Lz)
+        self.dop = DiffOps(nx = nx, ny = ny, nz = nz, Lx = Lx, Ly = Ly, Lz = Lz)
         
-        # Allocate memory for velocity and pressure
-        self.u     = np.empty((nxC,nyC,nzC),   dtype = np.float64, order = 'F')
-        self.v     = np.empty((nxC,nyC,nzC),   dtype = np.float64, order = 'F')
-        self.w     = np.empty((nxC,nyC,nzC),   dtype = np.float64, order = 'F')
-        self.p     = np.empty((nxC,nyC,nzC),   dtype = np.float64, order = 'F')
-        self.tauij = np.empty((nxC,nyC,nzC,6), dtype = np.float64, order = 'F')
-        self.A     = np.empty((nxC,nyC,nzC,3), dtype = np.float64, order = 'F')
-        self.B     = np.empty((nxC,nyC,nzC),   dtype = np.float64, order = 'F')
+        # Allocate memory for the flow variables
+        self.u     = np.empty((nx,ny,nz),   dtype = np.float64, order = 'F')
+        self.v     = np.empty((nx,ny,nz),   dtype = np.float64, order = 'F')
+        self.w     = np.empty((nx,ny,nz),   dtype = np.float64, order = 'F')
+        self.p     = np.empty((nx,ny,nz),   dtype = np.float64, order = 'F')
+        self.tauij = np.empty((nx,ny,nz,6), dtype = np.float64, order = 'F')
+        self.A     = np.empty((nx,ny,nz,3), dtype = np.float64, order = 'F')
+        self.B     = np.empty((nx,ny,nz),   dtype = np.float64, order = 'F')
 
     def mean_square(self,f):
         return np.mean(f*f)
@@ -95,8 +57,7 @@ class Loss:
     
     def xy_avg(self,f):
         nx, ny, nz = f.shape
-        f_avg = np.mean(f, axis = (0,1), keepdims = False)
-        return f_avg
+        return np.mean(f, axis = (0,1), keepdims = False)
     
     def fluct(self,u):
         nx, ny, nz = u.shape
@@ -118,15 +79,20 @@ class Loss:
         self.w = X[:,:,:,2]
         return None
     
-    def extract_3Dfields_from_output_layer(self,Y, nx, ny, nz, inc_tauij = True):
+    def extract_3Dfields_from_output_layer(self,Yhat, Y, nx, ny, nz, inc_tauij = True):
         if inc_tauij:
-          Y = Y.reshape(nx, ny, nz, 10, order = 'F')
-          self.tauij = Y[:,:,:,:6]
-          self.A = Y[:,:,:,6:9]
-          self.B = Y[:,:,:,9]
+          Yhat = Yhat.reshape(nx, ny, nz, 10, order = 'F')
+          self.tauij = Yhat[:,:,:,:6]
+          self.A = Yhat[:,:,:,6:9]
+          self.B = Yhat[:,:,:,9]
+          nprofs = 7
         else:
-          Y = Y.reshape(nx, ny, nz, 3, order = 'F')
-          self.A = Y
+          Yhat = Yhat.reshape(nx, ny, nz, 3, order = 'F')
+          self.A = Yhat
+          nprofs = 14
+
+        for i in range(nprofs):
+            self.ground_truth[self.ground_truth_keys[i]] = Y.reshape((nz,nprofs), order = 'F')[:,i]
         return None
     
     def L_mass(self):
@@ -170,12 +136,12 @@ class Loss:
     def L_P(self,p):
         return self.__L_mean_profile__(p,"meanP")
     
-    def L_uiuj(self,u,v,w):
+    def L_uiuj(self):
         L_uiuj = 0.
         inputs = {}
-        inputs["u1"] = self.fluct(u);
-        inputs["u2"] = self.fluct(v);
-        inputs["u3"] = self.fluct(w);
+        inputs["u1"] = self.fluct(self.u);
+        inputs["u2"] = self.fluct(self.v);
+        inputs["u3"] = self.fluct(self.w);
         for i in range(3):
             for j in range(3):
                 if i <= j:
@@ -191,20 +157,22 @@ class Loss:
         self.p = self.B*self.p
         return None
 
-    def compute_loss(self, X, Y, nx, ny, nz, lambda_p = 0.5, lambda_tau = 0.5, inc_mom = True):
-        assert nx == self.nxC
-        assert ny == self.nyC
-        assert nz == self.nzC
+    def compute_loss(self, X, Yhat, Y, nx, ny, nz, lambda_p = 0.5, lambda_tau = 0.5, inc_mom = True):
+        assert nx == self.nx
+        assert ny == self.ny
+        assert nz == self.nz
         if inc_mom:
             assert nx*ny*nz*4 == X.size
             assert nx*ny*nz*10 == Y.size
+            assert nx*ny*nz*10 == Yhat.size
         else:
             assert nx*ny*nz*3 == X.size
             assert nx*ny*nz*3 == Y.size
+            assert nx*ny*nz*3 == Yhat.size
         
         # Step 1: Extract data and apply scaling, e.g. u -> Au
         self.extract_field_variables_from_input_layer(X,nx,ny,nz,inc_prss = inc_mom)
-        self.extract_3Dfields_from_output_layer(Y,nx,ny,nz,inc_tauij = inc_mom)
+        self.extract_3Dfields_from_output_layer(Yhat,Y,nx,ny,nz,inc_tauij = inc_mom)
         self.modify_fields()
 
         # Compute loss functions
@@ -213,7 +181,7 @@ class Loss:
         if inc_mom:
             Lphys += self.L_mom()
             Lcontent = (1. - lambda_tau)*(Lcontent + self.L_P())
-            Lcontent += lambda_tau*self.L_tauij(...)
+            #Lcontent += lambda_tau*self.L_tauij()
         self.total_loss = lambda_p*Lphys + (1. - lambda_p*Lcontent)
         return None
 
@@ -370,13 +338,13 @@ if __name__ == '__main__':
     nx, ny, nz = 32, 32, 32
     coefs = [2.0, 0.5]
     fname_averages = sys.argv[2]
-    L_test = Loss(128,192,192,64,6.*pi,3.*pi,1.,fname_averages)
-    print(L_test.ground_truth["u1u1"][:10])
-    fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
-    ax1.plot(L_test.ground_truth["u1u1"],L_test.z)
-    ax2.plot(L_test.ground_truth["u2u2"],L_test.z)
-    ax3.plot(L_test.ground_truth["u3u3"],L_test.z)
-    ax4.plot(L_test.ground_truth["u1u3"],L_test.z)
+    L_test = Loss(192,192,64,6.*pi,3.*pi,1.)
+    #print(L_test.ground_truth["u1u1"][:10])
+    #fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
+    #ax1.plot(L_test.ground_truth["u1u1"],L_test.z)
+    #ax2.plot(L_test.ground_truth["u2u2"],L_test.z)
+    #ax3.plot(L_test.ground_truth["u3u3"],L_test.z)
+    #ax4.plot(L_test.ground_truth["u1u3"],L_test.z)
     #plt.show()
     X,Y,Z = test_xy_avg(L_test,nx,ny,nz,coefs)
 
