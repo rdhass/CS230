@@ -379,8 +379,9 @@ if __name__ == "__main__":
     data_directory = "Finger_Number_Data/"
 
     # Define the low and high resolution computational domains (we actually only need the z-vectors)
-    _, _, _, _, _, zF, _, _, _ = setup_domain(Lz = 1., nz = nzF)
-    _, _, _, _, _, zC, _, _, _ = setup_domain(Lz = 1., nz = 64)
+    nzC = 64
+    zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
+    zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
 
     # Load the data (this uses a function already written from CS230)
     #X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)

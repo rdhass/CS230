@@ -1,5 +1,5 @@
 from diff import DiffOps
-from domain_setup import setup_domain
+from domain_setup import setup_domain, setup_domain_1D
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,19 +8,14 @@ from read_fortran_data import read_fortran_data, get_domain_size
 from scipy import interpolate
 import sys
 from time import time
+from io_mod import load_dataset_V2
 
 class Loss:
     def __init__(self,nx,ny,nz,Lx,Ly,Lz):
         # Inputs:
         #   nx, ny, nz --> the number of grid points in domain "Course" grid
         #   Lx, Ly, Lz    --> Domain size in the "i"-dimension
-
-        # Defined the z-axis
-        _, _, _, _, _, zF, _, _, _     = setup_domain(Lz = Lz, nz = nzF)
-        zF = zF.reshape([nzF,1])
-        _, _, _, _, _, self.z, _, _, _ = setup_domain(Lx = Lx, Ly = Ly, Lz = Lz, \
-                nx = nx, ny = ny, nz = nz)
-        self.z = self.z.reshape([nz,1])
+        self.z = setup_domain_1D(Lz/nz*0.5,Lz-Lz/nz*0.5,Lz/nz)
         self.nx, self.ny, self.nz = nx, ny, nz
 
         # Initialize the ground truth dictionary
@@ -55,12 +50,20 @@ class Loss:
         L = self.mean_square(f - g)
         return L 
     
+    def confirm_dimensions(self,nx,ny,nz):
+        assert self.nx == nx
+        assert self.ny == ny
+        assert self.nz == nz
+        return None
+
     def xy_avg(self,f):
         nx, ny, nz = f.shape
+        self.confirm_dimensions(nx, ny, nz)
         return np.mean(f, axis = (0,1), keepdims = False)
     
     def fluct(self,u):
         nx, ny, nz = u.shape
+        self.confirm_dimensions(nx, ny, nz)
         uAvg = self.xy_avg(u)
         uprime = np.zeros((nx,ny,nz))
         for i in range(nx):
@@ -68,7 +71,8 @@ class Loss:
                 uprime[i,j,:] = u[i,j,:] - uAvg
         return uprime
     
-    def extract_field_variables_from_input_layer(self,X, nx, ny, nz, inc_prss = True):
+    def extract_field_variables_from_input_layer(self,X, inc_prss = True):
+        nx, ny, nz = self.nx, self.ny, self.nz
         if inc_prss:
             X = X.reshape(nx, ny, nz, 4, order = 'F')
             self.p = X[:,:,:,3]
@@ -79,20 +83,22 @@ class Loss:
         self.w = X[:,:,:,2]
         return None
     
-    def extract_3Dfields_from_output_layer(self,Yhat, Y, nx, ny, nz, inc_tauij = True):
+    def extract_3Dfields_from_output_layer(self,Yhat, Y, inc_tauij = True):
+        nx, ny, nz = self.nx, self.ny, self.nz
         if inc_tauij:
           Yhat = Yhat.reshape(nx, ny, nz, 10, order = 'F')
           self.tauij = Yhat[:,:,:,:6]
           self.A = Yhat[:,:,:,6:9]
           self.B = Yhat[:,:,:,9]
-          nprofs = 7
+          nprofs = 14
         else:
           Yhat = Yhat.reshape(nx, ny, nz, 3, order = 'F')
           self.A = Yhat
-          nprofs = 14
+          nprofs = 7
 
         for i in range(nprofs):
-            self.ground_truth[self.ground_truth_keys[i]] = Y.reshape((nz,nprofs), order = 'F')[:,i]
+            self.ground_truth[self.ground_truth_keys[i]] = \
+                    Y.reshape((nz,nprofs), order = 'F')[:,i]
         return None
     
     def L_mass(self):
@@ -157,10 +163,8 @@ class Loss:
         self.p = self.B*self.p
         return None
 
-    def compute_loss(self, X, Yhat, Y, nx, ny, nz, lambda_p = 0.5, lambda_tau = 0.5, inc_mom = True):
-        assert nx == self.nx
-        assert ny == self.ny
-        assert nz == self.nz
+    def compute_loss(self, X, Yhat, Y, lambda_p = 0.5, lambda_tau = 0.5, inc_mom = True):
+        nx,ny,nz = self.nx, self.ny, self.nz
         if inc_mom:
             assert nx*ny*nz*4 == X.size
             assert nx*ny*nz*10 == Y.size
@@ -171,8 +175,8 @@ class Loss:
             assert nx*ny*nz*3 == Yhat.size
         
         # Step 1: Extract data and apply scaling, e.g. u -> Au
-        self.extract_field_variables_from_input_layer(X,nx,ny,nz,inc_prss = inc_mom)
-        self.extract_3Dfields_from_output_layer(Yhat,Y,nx,ny,nz,inc_tauij = inc_mom)
+        self.extract_field_variables_from_input_layer(X,inc_prss = inc_mom)
+        self.extract_3Dfields_from_output_layer(Yhat,Y,inc_tauij = inc_mom)
         self.modify_fields()
 
         # Compute loss functions
@@ -203,9 +207,10 @@ def read_test_data(fname):
     Y = Y.flatten(order = 'F').reshape(10*ncube,1,order = 'F')
     return X, Y, nx, ny, nz
    
-def test_xy_avg(L,nx,ny,nz,coefs):
+def test_xy_avg(nx,ny,nz,coefs):
     for i in range(2):
         Lx, Ly, Lz = coefs[i]*pi, coefs[i]*pi, coefs[i]*pi
+        L = Loss(nx,ny,nz,6.*pi,3.*pi,1.)
         _, _, _, _, _, _, X, Y, Z = setup_domain(Lx, Ly, Lz, nx, ny, nz, zPeriodic = True)
 
         xcos = cos(X)
@@ -224,7 +229,8 @@ def test_xy_avg(L,nx,ny,nz,coefs):
         print("xy_avg test {} PASSED!".format(i+1))
     return X, Y, Z
 
-def test_MSE(L,nx,ny,nz,Lx,Ly,Lz):
+def test_MSE(nx,ny,nz,Lx,Ly,Lz):
+    L = Loss(nx,ny,nz,Lx,Ly,Lz)
     _, _, _, _, _, _, X, _, _ = setup_domain(Lx,Ly,Lz,nx,ny,nz,zPeriodic = True)
     xsin = sin(X)
     xcos = cos(X)
@@ -243,7 +249,7 @@ def test_MSE(L,nx,ny,nz,Lx,Ly,Lz):
     print("MSE test PASSED!")
     return None
 
-def test_extract_field_variables_from_input_layer(L,nx,ny,nz):
+def test_extract_field_variables_from_input_layer(nx,ny,nz):
     u = np.random.randn(nx,ny,nz)
     v = np.random.randn(nx,ny,nz)
     w = np.random.randn(nx,ny,nz)
@@ -251,8 +257,9 @@ def test_extract_field_variables_from_input_layer(L,nx,ny,nz):
     X = np.empty((nx,ny,nz,4), dtype = np.float64)
     X[:,:,:,0], X[:,:,:,1], X[:,:,:,2], X[:,:,:,3] = u, v, w, p
     X = X.flatten('F')
-
-    L.extract_field_variables_from_input_layer(X,nx,ny,nz)
+    
+    L = Loss(nx,ny,nz,1.,1.,1.)
+    L.extract_field_variables_from_input_layer(X)
     assert np.amax(L.u - u) < 1.e-12, 'np.amax(uc - u) = {}'.format(np.amax(L.u - u))
     assert np.amax(L.v - v) < 1.e-12, 'np.amax(vc - v) = {}'.format(np.amax(L.v - v))
     assert np.amax(L.w - w) < 1.e-12, 'np.amax(wc - w) = {}'.format(np.amax(L.w - w))
@@ -260,17 +267,19 @@ def test_extract_field_variables_from_input_layer(L,nx,ny,nz):
     print("extract_field_variables_from_input_layer test PASSED!")
     return None
 
-def test_extract_3Dfields_from_output_layer(L,nx,ny,nz):
+def test_extract_3Dfields_from_output_layer(nx,ny,nz):
     tauij = np.random.randn(nx,ny,nz,6)
     A     = np.random.randn(nx,ny,nz,3)
     B     = np.random.randn(nx,ny,nz)
-    Y     = np.empty((nx,ny,nz,10), dtype = np.float64)
-    Y[:,:,:,:6] = tauij
-    Y[:,:,:,6:9] = A
-    Y[:,:,:,9] = B
-    Y = Y.flatten('F')
+    Yhat     = np.empty((nx,ny,nz,10), dtype = np.float64)
+    Yhat[:,:,:,:6] = tauij
+    Yhat[:,:,:,6:9] = A
+    Yhat[:,:,:,9] = B
+    Yhat = Yhat.flatten('F')
+    Y = np.random.randn(nz*14,1)
 
-    L.extract_3Dfields_from_output_layer(Y,nx,ny,nz)
+    L = Loss(nx,ny,nz,1.,1.,1.)
+    L.extract_3Dfields_from_output_layer(Yhat,Y)
     assert np.amax(A - L.A) < 1.e-12, 'np.amax(A - Ac) = {}'.format(np.amax(A - L.A))
     assert np.amax(B - L.B) < 1.e-12, 'np.amax(B - Bc) = {}'.format(np.amax(B - L.B))
     assert np.amax(tauij - L.tauij) < 1.e-12, 'np.amax(tauij - L.tauij) = {}'.\
@@ -280,7 +289,7 @@ def test_extract_3Dfields_from_output_layer(L,nx,ny,nz):
 
 def test_L_mass(L,fname):
     X, Y, nx, ny, nz = read_test_data(fname)
-    L.extract_field_variables_from_input_layer(X,nx,ny,nz)
+    L.extract_field_variables_from_input_layer(X)
     L.dop = DiffOps(nx = nx, ny = ny, nz = nz, Lx = 2.*pi, Ly = 2.*pi, Lz = 2.*pi)
    
     Lmass = L.L_mass()
@@ -289,9 +298,10 @@ def test_L_mass(L,fname):
     print("Lmass = {}".format(Lmass))
     return None
 
-def test_fluct(L,fname):
+def test_fluct(fname):
     X, _, nx, ny, nz = read_test_data(fname)
-    L.extract_field_variables_from_input_layer(X,nx,ny,nz)
+    L = Loss(nx,ny,nz,2.*pi,2.*pi,2.*pi)
+    L.extract_field_variables_from_input_layer(X,inc_prss = True)
     
     ufluct = L.fluct(L.u)
     vfluct = L.fluct(L.v)
@@ -304,20 +314,16 @@ def test_fluct(L,fname):
     print("fluct test PASSED!")
     return None
 
-def test_L_U(L,fname):
-    u = read_fortran_data(fname,'uVel')
-    L_U = L.L_U(u)
+def test_L_U(L):
+    L_U = L.L_U(L.u)
     L_U_Mat = 0.028057428411232
     assert L_U - L_U_Mat < 1.e-12, "L_U computed: {}. Expected result: {}".format(L.L_U(u),L_U_Mat)
     print('L_U test PASSED!') 
     return None
 
-def test_L_uiuj(L,fname):
-    u = read_fortran_data(fname,'uVel')
-    v = read_fortran_data(fname,'vVel')
-    w = read_fortran_data(fname,'wVel')
+def test_L_uiuj(L):
     st = time()
-    L_uiuj = L.L_uiuj(u,v,w)
+    L_uiuj = L.L_uiuj()
     en = time() - st
     print("L_uiuj took {}s to compute".format(en))
     L_uiuj_Mat = sum((0.148239052336250,6.535248054341532e-04,0.001795615654557,\
@@ -327,10 +333,22 @@ def test_L_uiuj(L,fname):
     print("L_uiuj test PASSED!")
     return None
 
+def load_data_for_loss_tests(datadir,nzC,nzF,Lz = 1.):
+    nx, ny, nz = 192, 192, nzC
+    zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
+    zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
+    x_tid_vec = np.array([179300])
+    y_tid_vec = np.array([73200])
+    X, Y, _, _ = load_dataset_V2(datadir,192,192,64,zF,zC,x_tid_vec,x_tid_vec,\
+            y_tid_vec,y_tid_vec,navg = 3020)
+    Yhat = np.ones((nx*ny*nz*10,1), dtype = np.float64, order = 'F')
+    return X, Y, Yhat
+
 if __name__ == '__main__':
-    if len(sys.argv) < 4:
+    if len(sys.argv) < 5:
         print("Usage:")
-        print("  python3 loss_fcns.py <fname of HIT data> <fname of HR PBL averages> <fname of LR PBL data>")
+        print("  python3 loss_fcns.py <fname of HIT data> "\
+                +"<fname of HR PBL averages> <fname of LR PBL data> <datadir>")
         sys.exit()
 
 #### For milestone ######
@@ -339,36 +357,47 @@ if __name__ == '__main__':
     coefs = [2.0, 0.5]
     fname_averages = sys.argv[2]
     L_test = Loss(192,192,64,6.*pi,3.*pi,1.)
-    #print(L_test.ground_truth["u1u1"][:10])
-    #fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
-    #ax1.plot(L_test.ground_truth["u1u1"],L_test.z)
-    #ax2.plot(L_test.ground_truth["u2u2"],L_test.z)
-    #ax3.plot(L_test.ground_truth["u3u3"],L_test.z)
-    #ax4.plot(L_test.ground_truth["u1u3"],L_test.z)
-    #plt.show()
-    X,Y,Z = test_xy_avg(L_test,nx,ny,nz,coefs)
+    X,Y,Z = test_xy_avg(nx,ny,nz,coefs)
 
     # Test fluct
     fname_HIT = sys.argv[1]
-    test_fluct(L_test,fname_HIT)
+    test_fluct(fname_HIT)
 
     # Test MSE
-    test_MSE(L_test,nx,ny,nz,coefs[1]*pi,coefs[1]*pi,coefs[1]*pi)
+    test_MSE(nx,ny,nz,coefs[1]*pi,coefs[1]*pi,coefs[1]*pi)
 
     # Test extract_field_variables_from_input_layer
-    test_extract_field_variables_from_input_layer(L_test,nx,ny,nz)
+    test_extract_field_variables_from_input_layer(nx,ny,nz)
 
     # Test extract_3Dfields_from_output_layer
-    test_extract_3Dfields_from_output_layer(L_test,nx,ny,nz)
+    test_extract_3Dfields_from_output_layer(nx,ny,nz)
+
+    # Load actual channel data for loss tests
+    fname_LR = sys.argv[3]
+    datadir = sys.argv[4] + '/'
+    X, Y, Yhat = load_data_for_loss_tests(datadir,64,128)
+
+    # Load data into Loss class
+    L_test.extract_field_variables_from_input_layer(X)
+    L_test.extract_3Dfields_from_output_layer(Yhat, Y)
+    
+    # Plot some ground-truth profiles to confirm proper initialization of the class
+    #print(L_test.ground_truth["u1u1"][:10])
+    fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
+    ax1.plot(L_test.ground_truth["u1u1"],L_test.z)
+    ax2.plot(L_test.ground_truth["u2u2"],L_test.z)
+    ax3.plot(L_test.ground_truth["u3u3"],L_test.z)
+    ax4.plot(L_test.ground_truth["u1u3"],L_test.z)
+    plt.show()
 
     # Test L_U
-    fname_LR = sys.argv[3]
-    test_L_U(L_test,fname_LR)
+    test_L_U(L_test)
     
     # Test L_uiuj
-    test_L_uiuj(L_test,fname_LR)
+    test_L_uiuj(L_test)
+    
     # Test L_mass
-    L_test = Loss(128,32,32,32,2.*pi,2.*pi,2.*pi,fname_averages)
+    L_test = Loss(32,32,32,2.*pi,2.*pi,2.*pi)
     test_L_mass(L_test,fname_HIT)
 
 ###### For final project ######
