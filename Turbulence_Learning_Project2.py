@@ -103,7 +103,8 @@ class NN_model:
             self.Y_Graph1_NNpredict = self.standard_forward_propagation(X = self.X_Graph1_PH, FP_sequence = FP_sequence_Graph1)
 
             # Calculate the loss, which involves the forward propagation outputs, the label data, and a loss function (which should be in last entry of the last list of FP_sequence_Graph1)
-            self.Loss.comput_loss(X, Yhat, Y, lambda_p = lambda_p, lambda_tau = lambda_tau, inc_mom = inc_mom)
+            self.Loss.comput_loss(self.X_Graph1_PH, self.Y_Graph1_NNpredict, self.Y_Graph1, \
+                    lambda_p = lambda_p, lambda_tau = lambda_tau)
             #self.loss_Graph1 = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, \
             #        Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
             #self.loss_Graph1_PHYSICS = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
