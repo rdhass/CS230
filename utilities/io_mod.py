@@ -18,9 +18,10 @@ def get_x_vec(datadir,X,buff,tid_vec,dsname):
 def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
   
     nzC = np.size(zC)
+    nzF = np.size(zF)
     for n, tid in enumerate(tid_vec):
         fname = datadir + 'Run01_budget0_t' + str(tid).zfill(6) + '_n' + \
-                str(navg).zfill(6) + '.stt'
+                str(navg).zfill(6) + '_nzF' + str(nzF) + '.stt'
         
         # Read in average profiles from disk. These correspond to the "Fine" grid
         avgF = np.genfromtxt(fname,dtype = np.float64)

@@ -1,10 +1,12 @@
 import sys
 sys.path.insert(0,'/Users/ryanhass/Documents/MATLAB/CS_230/Final_project/utilities')
 import numpy as np
+from numpy import pi
 import code
 import tensorflow.compat.v1 as tf
 from tensorflow.python.framework import ops
 from tf_utils import load_dataset, random_mini_batches, convert_to_one_hot, predict
+from io_mod import load_dataset_V2
 import time
 import h5py
 import os
@@ -42,7 +44,8 @@ NOTE: - FP_sequence defines the sequence of transforms to be applied to the inpu
 '''
 
 class NN_model:
-    def __init__(self, N_neurons_in_layers, FP_sequence, X_train_All, Y_train_All, X_test, Y_test):
+    def __init__(self, N_neurons_in_layers, FP_sequence, X_train_All, Y_train_All, X_test, Y_test,\
+            nx, ny, nz, Lx, Ly, Lz, lambda_p, lambda_tau, inc_mom):
 
         self.N_neurons_in_layers = N_neurons_in_layers
         self.FP_sequence = FP_sequence
@@ -75,7 +78,7 @@ class NN_model:
         self.Graph1 = tf.Graph()
 
         # Initiate the loss function object
-        self.Loss = Loss(nzF,192,192,64,6.*pi,3.*pi,1.,fname)
+        self.Loss = Loss(nx,ny,nz,Lx,Ly,Lz,inc_mom = inc_mom)
 
         # Define our network in this graph
         with self.Graph1.as_default():
@@ -100,7 +103,9 @@ class NN_model:
             self.Y_Graph1_NNpredict = self.standard_forward_propagation(X = self.X_Graph1_PH, FP_sequence = FP_sequence_Graph1)
 
             # Calculate the loss, which involves the forward propagation outputs, the label data, and a loss function (which should be in last entry of the last list of FP_sequence_Graph1)
-            self.loss_Graph1 = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
+            self.Loss.comput_loss(X, Yhat, Y, lambda_p = lambda_p, lambda_tau = lambda_tau, inc_mom = inc_mom)
+            #self.loss_Graph1 = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, \
+            #        Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
             #self.loss_Graph1_PHYSICS = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
 
             #################################################################################################
@@ -366,11 +371,10 @@ class NN_model:
 
 if __name__ == "__main__":
     
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 4:
         print("Usage: ")
-        print("  python3 Turbulence_Learning_Project2.py <nzF>")
+        print("  python3 Turbulence_Learning_Project2.py <nzF> <lambda_p> <lambda_tau>")
         exit(0)
-    nzF = sys.argv[1]
 
     # Reverting to TensorFlow version 1
     tf.disable_v2_behavior()
@@ -378,17 +382,42 @@ if __name__ == "__main__":
     # File path from code to data directory
     data_directory = "Finger_Number_Data/"
 
-    # Define the low and high resolution computational domains (we actually only need the z-vectors)
+    # Spatial domain
+    nxC = 192
+    nyC = 192
     nzC = 64
+    nzF = sys.argv[1]
+
+    Lx = 6.*pi
+    Ly = 3.*pi
+    Lz = 1.
+    
+    # Define the low and high resolution computational domains (we actually only need the z-vectors)
     zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
     zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
+
+    # Loss function parameters
+    lambda_p = sys.argv[2]
+    lambda_tau = sys.argv[3]
+    inc_mom = False
+
+    ### Data IO parameters ###
+    # Specify which time steps are included in the training/test sets for both...
+    # ... input features and labels
+    x_tid_vec_train = np.array([])
+    x_tid_vec_test = np.array([])
+    y_tid_vec_train = np.array([])
+    y_tid_vec_test = np.array([])
+
+    # How many timesteps were used to generate the averages (if tavg is used)
+    navg = 840
 
     # Load the data (this uses a function already written from CS230)
     #X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)
     X_train_orig, Y_train_orig, X_test_orig, Y_test_orig = \
             load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
-            inc_prss = False, nsteps_avg = 3020)
+            inc_prss = False, nsteps_avg = navg)
 
     #*** NOTE: load_dataset_V2 returns flattened data ***
     
@@ -469,7 +498,8 @@ if __name__ == "__main__":
 
 
     # Define the model
-    model = NN_model(N_neurons_in_layers = N_neurons_in_layers, FP_sequence = FP_sequence, X_train_All = X_train, Y_train_All = Y_train, X_test = X_test, Y_test = Y_test)
+    model = NN_model(N_neurons_in_layers, FP_sequence, X_train, Y_train, X_test, Y_test, \
+            nx, ny, nz, Lx, Ly, Lz, lambda_p, lambda_tau, inc_mom)
 
     # Train the model
     model.train()
