@@ -1,3 +1,4 @@
+import code
 from domain_setup import setup_domain_1D
 import numpy as np
 from numpy import pi
@@ -7,6 +8,7 @@ from time import time
 from io_mod import load_dataset_V2
 from diff_tf import DiffOps
 import tensorflow as tf
+from mse_custom import mse_custom
 
 # Array shapes: 
 # X, Yhat: [m, nvars, nx, ny, nz]
@@ -31,18 +33,18 @@ class Loss:
         self.nx, self.ny, self.nz = nx, ny, nz
 
         # Initialize derivative operator
-        dop = DiffOps(nx, ny, nz, Lx, Ly, Lz):
+        self.dop = DiffOps(nx, ny, nz, Lx, Ly, Lz)
 
         # Allocate memory for the flow variables
         self.fields = {}
-        self.fields["u1"] = tf.zeros((n_exmamples,nx,ny,nz), dtype = tf.float32)  
-        self.fields["u2"] = tf.zeros((n_exmamples,nx,ny,nz), dtype = tf.float32)  
-        self.fields["u3"] = tf.zeros((n_exmamples,nx,ny,nz), dtype = tf.float32)  
+        self.fields["u1"] = tf.zeros((n_examples,nx,ny,nz), dtype = tf.float32)  
+        self.fields["u2"] = tf.zeros((n_examples,nx,ny,nz), dtype = tf.float32)  
+        self.fields["u3"] = tf.zeros((n_examples,nx,ny,nz), dtype = tf.float32)  
         if self.inc_mom:
-            self.fields["p"] = tf.zeros((n_exmamples,nx,ny,nz), dtype = tf.float32)  
+            self.fields["p"] = tf.zeros((n_examples,nx,ny,nz), dtype = tf.float32)  
 
         # Allocate memory for the current state
-        current_state = tf.zeros((n_exmpales,self.nprofs,nz), dtype = tf.float32)
+        current_state = tf.zeros((n_examples,self.nprofs,nz), dtype = tf.float32)
 
     def mean_square(self,f):
         return tf.math.reduce_mean(tf.multiply(f,f), name = 'mean_square')
@@ -54,9 +56,9 @@ class Loss:
         return None
 
     def xy_avg(self,f):
-        nx, ny, nz = tuple(f.shape().as_list())
+        _, nx, ny, nz = tuple(f.shape.as_list())
         self.confirm_dimensions(nx, ny, nz)
-        return tf.math.reduce_mean(f, axis = (2,3), keepdims = False, name = 'xy_avg')
+        return tf.math.reduce_mean(f, axis = (1,2), keepdims = False, name = 'xy_avg')
     
     def L_mass(self):
         return self.mean_square(self.dop.ddx_pointed(self.fields['u1']) + \
@@ -99,20 +101,21 @@ class Loss:
     
         return None
     
-    def compute_averages(self,Yhat):
+    def compute_averages(self):
+        # Stack in the following order: mean(U), <u1u1> ,<u1u2>, <u1u3>, <u2u2>, <u2u3>, <u3u3>
         self.current_state = tf.transpose( tf.stack([\
-                self.xy_avg(self.fields['u1']),\ # mean(U)
-                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u1'])) - \ #R11
-                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u1'])), \ 
-                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u2'])) - \ #R12
-                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u2'])), \ 
-                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u3'])) - \ #R13
-                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u3'])), \ 
-                self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u2'])) - \ #R22
-                        tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u2'])), \ 
-                self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u3'])) - \ #R23
-                        tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u3'])), \ 
-                self.xy_avg(tf.math.multiply(self.fields['u3'],self.fields['u3'])) - \ #R33
+                self.xy_avg(self.fields['u1']),\
+                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u1'])) - \
+                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u1'])), \
+                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u2'])) - \
+                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u2'])), \
+                self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u3'])) - \
+                        tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u3'])), \
+                self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u2'])) - \
+                        tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u2'])), \
+                self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u3'])) - \
+                        tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u3'])), \
+                self.xy_avg(tf.math.multiply(self.fields['u3'],self.fields['u3'])) - \
                         tf.math.multiply(self.xy_avg(self.fields['u3']),self.xy_avg(self.fields['u3']))], \
                 ), perm = [1,0,2] )
 
@@ -121,9 +124,13 @@ class Loss:
             None
         return None
 
+    def MSE(self,Y):
+        return tf.math.reduce_mean(tf.multiply(Y-self.current_state, \
+                Y-self.current_state), axis=(0,2))
+
     def Lcontent(self,Y):
-        mse = tf.keras.losses.MeanSquaredError()
-        Lcont = tf.reduce_mean(mse(Y, self.current_state)) #self.L_uiuj() + self.L_U()
+        mse = self.MSE(Y)
+        Lcont = tf.math.reduce_sum(mse) #self.L_uiuj() + self.L_U()
         return Lcont
 
     def compute_loss(self, Yhat, Y, lambda_p = 0.5, lambda_tau = 0.5):
@@ -158,10 +165,10 @@ class Loss:
        
         #self.extract_avg_profiles_from_labels_array(Y)
         self.set_fields(Yhat)
-        self.compute_averages(Yhat)
+        self.compute_averages()
 
         # Compute loss functions
-        Lphys = self.L_mass(Y)
+        Lphys = self.L_mass()
         Lcont = self.Lcontent(Y)
 
         if self.inc_mom:
@@ -181,7 +188,10 @@ def load_data_for_loss_tests(datadir,nx,ny,nzC,nzF,Lx,Ly,Lz,tidx,tidy,navg,inc_p
     zC =  setup_domain_1D(0.5*Lz/nzC, Lz - 0.5*Lz/nzC, Lz/nzC)
     Yhat, Y, _, _ = load_dataset_V2(datadir, nx, ny, nzC, zF, zC, tidx_vec, \
             tidx_vec, tidy_vec, tidy_vec, inc_prss = inc_prss, navg = navg)
-    
+   
+    Yhat = Yhat.reshape((1,3,nx,ny,nzC), order = 'F')
+    Y = tf.cast(Y, tf.float32)
+    Yhat = tf.cast(Yhat, tf.float32)
     return Y, Yhat
 
 if __name__ == '__main__':
@@ -211,25 +221,17 @@ if __name__ == '__main__':
     # Load channel data for loss tests
     Y, Yhat = load_data_for_loss_tests(datadir,nx,ny,nzC,nzF,Lx,Ly,Lz,tidx,tidy,navg,\
             inc_prss = False)
-
+    
     # Create placeholders for tf operations
     # Load data into Loss class
-    L_test = Loss(nx,ny,nz,Lx,Ly,Lz,1,inc_mom = False):
+    L_test = Loss(nx,ny,nzC,Lx,Ly,Lz,1,inc_mom = False)
     L_test.set_fields(Yhat)
-
     L_test.compute_averages()
+    Lphys = L_test.L_mass()
+    Lcont = L_test.Lcontent(Y)
+    code.interact(local=locals())
     
     # TODO: Plot some ground-truth profiles to confirm proper initialization of the class
-
-    # Test L_U
-    test_L_U(L_test)
-    
-    # Test L_uiuj
-    test_L_uiuj(L_test)
-    
-    # Test L_mass
-    L_test = Loss(32,32,32,2.*pi,2.*pi,2.*pi,True)
-    test_L_mass(L_test,fname_HIT)
 
 ###### For final project ######
     # Test L_P
