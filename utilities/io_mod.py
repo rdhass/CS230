@@ -8,11 +8,11 @@ def get_x_vec(datadir,X,buff,tid_vec,dsname):
     for n, tid in enumerate(tid_vec):
         tidstr = str(tid).zfill(7)
         if n > 0:
-            X[:,n-1] = buff.flatten(order = 'F')
+            X[n-1,:] = buff.flatten(order = 'F')
         for i, ds in enumerate(dsname):
-            buff[:,:,:,i] = read_fortran_data(datadir + 'Run01_' + \
+            buff[i,:,:,:] = read_fortran_data(datadir + 'Run01_' + \
                     tidstr + '.h5', ds)
-    X[:,-1] = buff.flatten(order = 'F')
+    X[-1,:] = buff.flatten(order = 'F')
     return X
 
 def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
@@ -24,20 +24,20 @@ def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
                 str(navg).zfill(6) + '_nzF' + str(nzF) + '.stt'
         
         # Read in average profiles from disk. These correspond to the "Fine" grid
-        avgF = np.genfromtxt(fname,dtype = np.float64)
+        avgF = np.genfromtxt(fname,dtype = np.float32).T
 
         # Interpolate the average profiles to the zC locations (i.e. "Course" grid)
-        avgC = np.zeros((nzC,avgF.shape[1]))
-        for i in range(avgF.shape[1]):
-            tck = interpolate.splrep(zF, avgF[:,i], s=0)
-            avgC[:,i] = interpolate.splev(np.squeeze(zC), tck, der=0)
+        avgC = np.zeros((avgF.shape[0],nzC))
+        for i in range(avgF.shape[0]):
+            tck = interpolate.splrep(zF.T, avgF[i,:], s=0)
+            avgC[i,:] = interpolate.splev(np.squeeze(zC.T), tck, der=0)
 
         # Copy the profiles we need to the buffer array
         for i, prof in enumerate(prof_ids):
-            buff[:,i] = avgC[:,prof]
+            buff[i,:] = avgC[prof,:]
 
         # Copy the flattened buffer to the Y-vector
-        Y[:,n] = buff.flatten(order = 'F')
+        Y[n,:] = buff.flatten(order = 'F')
     return Y
 
 def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test,\
@@ -71,14 +71,14 @@ def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test
         prof_id = (0,3,4,5,6,7,8)
     assert len(prof_id) == nprofs
 
-    buff_x = np.empty((nx,ny,nz,nfields), dtype = np.float64, order = 'F')
-    buff_y = np.empty((nz,nprofs),        dtype = np.float64, order = 'F')
+    buff_x = np.empty((nfields,nx,ny,nz), dtype = np.float32, order = 'F')
+    buff_y = np.empty((nprofs,nz),        dtype = np.float32, order = 'F')
     
     # Initialize training and test features and labels
-    train_set_x_orig = np.empty((nfields*ncube,tsteps_train), dtype = np.float64, order = 'F') 
-    test_set_x_orig  = np.empty((nfields*ncube,tsteps_test),  dtype = np.float64, order = 'F')
-    train_set_y_orig = np.empty((nprofs*nz,tsteps_train), dtype = np.float64, order = 'F') 
-    test_set_y_orig  = np.empty((nprofs*nz,tsteps_test),  dtype = np.float64, order = 'F')
+    train_set_x_orig = np.empty((tsteps_train,nfields*ncube), dtype = np.float32, order = 'F') 
+    test_set_x_orig  = np.empty((tsteps_test, nfields*ncube), dtype = np.float32, order = 'F')
+    train_set_y_orig = np.empty((tsteps_train,nprofs*nz), dtype = np.float32, order = 'F') 
+    test_set_y_orig  = np.empty((tsteps_test, nprofs*nz), dtype = np.float32, order = 'F')
     
     train_set_x_orig = get_x_vec(data_directory, train_set_x_orig, buff_x, x_tid_vec_train, dsname)
     test_set_x_orig  = get_x_vec(data_directory, test_set_x_orig,  buff_x, x_tid_vec_test,  dsname)

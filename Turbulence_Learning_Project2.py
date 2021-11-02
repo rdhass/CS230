@@ -1,12 +1,11 @@
 import sys
-sys.path.insert(0,'/Users/ryanhass/Documents/MATLAB/CS_230/Final_project/utilities')
 import numpy as np
 from numpy import pi
 import code
 import tensorflow.compat.v1 as tf
 from tensorflow.python.framework import ops
-from tf_utils import load_dataset, random_mini_batches, convert_to_one_hot, predict
-from io_mod import load_dataset_V2
+from utilities.tf_utils import load_dataset, random_mini_batches, convert_to_one_hot, predict
+from utilities.io_mod import load_dataset_V2
 import time
 import h5py
 import os
@@ -103,7 +102,7 @@ class NN_model:
             self.Y_Graph1_NNpredict = self.standard_forward_propagation(X = self.X_Graph1_PH, FP_sequence = FP_sequence_Graph1)
 
             # Calculate the loss, which involves the forward propagation outputs, the label data, and a loss function (which should be in last entry of the last list of FP_sequence_Graph1)
-            self.Loss.comput_loss(self.X_Graph1_PH, self.Y_Graph1_NNpredict, self.Y_Graph1, \
+            self.Loss.comput_loss(self.Y_Graph1_NNpredict, self.Y_Graph1, \
                     lambda_p = lambda_p, lambda_tau = lambda_tau)
             #self.loss_Graph1 = self.compute_loss(Y_NNpredict = self.Y_Graph1_NNpredict, \
             #        Y = self.Y_Graph1_PH, FP_sequence = FP_sequence_Graph1)
@@ -415,7 +414,7 @@ if __name__ == "__main__":
 
     # Load the data (this uses a function already written from CS230)
     #X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)
-    X_train_orig, Y_train_orig, X_test_orig, Y_test_orig = \
+    X_train, Y_train, X_test, Y_test = \
             load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = False, nsteps_avg = navg)
