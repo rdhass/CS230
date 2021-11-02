@@ -1,4 +1,4 @@
-from domain_setup import setup_domain
+from domain_setup import setup_domain_1D
 import numpy as np
 from numpy import pi
 from read_fortran_data import read_fortran_data
@@ -16,7 +16,9 @@ def get_x_vec(datadir,X,buff,tid_vec,dsname):
     return X
 
 def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
-  
+    # Output: 
+    #   Y --> labels vector of dimension [n_examples, nprofs, nzC]
+    
     nzC = np.size(zC)
     nzF = np.size(zF)
     for n, tid in enumerate(tid_vec):
@@ -37,7 +39,7 @@ def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
             buff[i,:] = avgC[prof,:]
 
         # Copy the flattened buffer to the Y-vector
-        Y[n,:] = buff.flatten(order = 'F')
+        Y[n,:,:] = buff
     return Y
 
 def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test,\
@@ -75,38 +77,38 @@ def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test
     buff_y = np.empty((nprofs,nz),        dtype = np.float32, order = 'F')
     
     # Initialize training and test features and labels
-    train_set_x_orig = np.empty((tsteps_train,nfields*ncube), dtype = np.float32, order = 'F') 
-    test_set_x_orig  = np.empty((tsteps_test, nfields*ncube), dtype = np.float32, order = 'F')
-    train_set_y_orig = np.empty((tsteps_train,nprofs*nz), dtype = np.float32, order = 'F') 
-    test_set_y_orig  = np.empty((tsteps_test, nprofs*nz), dtype = np.float32, order = 'F')
+    train_set_x = np.empty((tsteps_train, nfields*ncube), dtype = np.float32, order = 'F') 
+    test_set_x  = np.empty((tsteps_test,  nfields*ncube), dtype = np.float32, order = 'F')
+    train_set_y = np.empty((tsteps_train, nprofs, nz), dtype = np.float32, order = 'F') 
+    test_set_y  = np.empty((tsteps_test,  nprofs, nz), dtype = np.float32, order = 'F')
     
-    train_set_x_orig = get_x_vec(data_directory, train_set_x_orig, buff_x, x_tid_vec_train, dsname)
-    test_set_x_orig  = get_x_vec(data_directory, test_set_x_orig,  buff_x, x_tid_vec_test,  dsname)
+    train_set_x = get_x_vec(data_directory, train_set_x, buff_x, x_tid_vec_train, dsname)
+    test_set_x  = get_x_vec(data_directory, test_set_x,  buff_x, x_tid_vec_test,  dsname)
 
-    train_set_y_orig = get_y_vec(data_directory, train_set_y_orig, buff_y, zF, zC, y_tid_vec_train, prof_id, navg = navg)
-    test_set_y_orig  = get_y_vec(data_directory, test_set_y_orig,  buff_y, zF, zC, y_tid_vec_test,  prof_id, navg = navg)
+    train_set_y = get_y_vec(data_directory, train_set_y, buff_y, zF, zC, y_tid_vec_train, prof_id, navg = navg)
+    test_set_y  = get_y_vec(data_directory, test_set_y,  buff_y, zF, zC, y_tid_vec_test,  prof_id, navg = navg)
 
-    #train_set_y_orig = train_set_y_orig.reshape((1, train_set_y_orig.shape[0]))
-    #test_set_y_orig = test_set_y_orig.reshape((1, test_set_y_orig.shape[0]))
+    #train_set_y = train_set_y.reshape((1, train_set_y.shape[0]))
+    #test_set_y = test_set_y.reshape((1, test_set_y.shape[0]))
     
-    return train_set_x_orig, train_set_y_orig, test_set_x_orig, test_set_y_orig
+    return train_set_x, train_set_y, test_set_x, test_set_y
 
 ################## TESTS ###############################
 def test_load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = True, navg = 1):
-    X_train_orig, Y_train_orig, X_test_orig, Y_test_orig = \
+    X_train, Y_train, X_test, Y_test = \
             load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = inc_prss, navg = navg)
-    print("Shape of X_train_orig: {}".format(X_train_orig.shape))
-    print("Shape of X_test_orig: {}".format(X_test_orig.shape))
-    print("Shape of Y_train_orig: {}".format(Y_train_orig.shape))
-    print("Shape of Y_test_orig: {}".format(Y_test_orig.shape))
-    print(X_train_orig[:10])
-    print(X_test_orig[:10])
-    print(Y_train_orig[:10])
-    print(Y_test_orig[:10])
+    print("Shape of X_train: {}".format(X_train.shape))
+    print("Shape of X_test: {}".format(X_test.shape))
+    print("Shape of Y_train: {}".format(Y_train.shape))
+    print("Shape of Y_test: {}".format(Y_test.shape))
+    print(X_train[:10])
+    print(X_test[:10])
+    print(Y_train[0,0,:10])
+    print(Y_test[0,0,:10])
     return None
 
 if __name__ == '__main__':
@@ -114,18 +116,19 @@ if __name__ == '__main__':
     nx = 192
     ny = 192
     nz = 64
-    nzF = 128
+    nzF = 256
     Lx = 6.*pi
     Ly = 3.*pi
     Lz = 1.
 
-    _, _, _, _, _, zC, _, _, _ = setup_domain(nz = nz, Lz = Lz)
-    _, _, _, _, _, zF, _, _, _ = setup_domain(nz = nzF, Lz = Lz)
+    zC = setup_domain_1D(0.5*Lz/nz , Lz - 0.5*Lz/nz , Lz/nz)
+    zF = setup_domain_1D(0.5*Lz/nzF, Lz - 0.5*Lz/nzF, Lz/nzF)
+    print(zF[:3])
 
     x_tid_vec_test = np.array([179300])
     x_tid_vec_train = np.array([179300])
-    y_tid_vec_test = np.array([73200])
-    y_tid_vec_train = np.array([73200])
+    y_tid_vec_test = np.array([25400])
+    y_tid_vec_train = np.array([25400])
     test_load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
-            inc_prss = False, navg = 3020)
+            inc_prss = False, navg = 840)
