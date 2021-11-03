@@ -47,6 +47,8 @@ def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test
     # Inputs:
     #   data_directory  --> directory path where raw data resides
     #   nx, ny, nz      --> number of grid points in computational domain
+    #   zC, zF          --> 1D vectors specifying the z-coordinates for the "Course" ...
+    #                       ... and "Fine" grids respectively
     #   x_tid_vec_test  --> vector of time ID's from the simulation for the training features 
     #   x_tid_vec_train --> "                                             " test features
     #   y_tid_vec_test  --> "                                             " training labels 
