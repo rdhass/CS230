@@ -77,6 +77,7 @@ def load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, x_tid_vec_
 
     # Define the low and high resolution computational domains (we actually only need the z-vectors)
     nzC = nz
+    Lz = params.Lz
     zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
     zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
     
@@ -152,11 +153,13 @@ def test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
     print(X_test[:10])
     print(Y_train[0,0,:10])
     print(Y_test[0,0,:10])
-    
+   
+    print('\n --------------------------------------------------------- \n')
     X_train, Y_train, X_test, Y_test = normalize_data(X_train, Y_train, X_test, \
             Y_test, inc_prss = inc_prss)
     print(X_train[:10])
     print(X_test[:10])
+    print(X_test[0,-10:])
     print(Y_train[0,0,:10])
     print(Y_test[0,0,:10])
     return None
@@ -177,4 +180,4 @@ if __name__ == '__main__':
     y_tid_vec_train = np.array([25400])
     test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
-            inc_prss = False, navg = 840)
+            inc_prss = True, navg = 840)
