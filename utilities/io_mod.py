@@ -3,6 +3,7 @@ import numpy as np
 from numpy import pi
 from read_fortran_data import read_fortran_data
 from scipy import interpolate
+import problem_parameters as params
 
 def get_x_vec(datadir,X,buff,tid_vec,dsname):
     for n, tid in enumerate(tid_vec):
@@ -99,6 +100,42 @@ def load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, x_tid_vec_
     
     return train_set_x, train_set_y, test_set_x, test_set_y
 
+def normalize_data(train_set_x, train_set_y, test_set_x, test_set_y, inc_prss = True):
+    ncube = params.nx*params.ny*params.nzC
+    vel_scale = params.utau/params.Uinf
+    vel_scale_sq = vel_scale**2.
+
+    # Confirm input array dimensions
+    if inc_prss:
+        assert train_set_x.shape[1] == ncube*4
+        assert test_set_x.shape[1] == ncube*4
+        
+        assert train_set_y.shape[1] == 14
+        assert test_set_y.shape[1] == 14
+    else:
+        assert train_set_x.shape[1] == ncube*3
+        assert test_set_x.shape[1] == ncube*3
+        
+        assert train_set_y.shape[1] == 7
+        assert test_set_y.shape[1] == 7
+    
+    assert train_set_y.shape[2] == params.nzC
+    assert test_set_y.shape[2] == params.nzC
+
+    train_set_x[:,:ncube*3] = train_set_x[:,:ncube*3] * vel_scale
+    train_set_y[:,0,:] = train_set_y[:,0,:] * vel_scale
+    train_set_y[:,1:7,:] = train_set_y[:,1:7,:] * vel_scale_sq
+    
+    test_set_x[:,:ncube*3] = test_set_x[:,:ncube*3] * vel_scale
+    test_set_y[:,0,:] = test_set_y[:,0,:] * vel_scale
+    test_set_y[:,1:7,:] = test_set_y[:,1:7,:] * vel_scale_sq
+
+    if inc_prss:
+        train_set_x[:,ncube*3:] = train_set_x[:,ncube*3:] * vel_scale_sq
+        train_set_y[:,7:,:] = train_set_y[:,7:,:] * vel_scale_sq
+
+    return train_set_x, train_set_y, test_set_x, test_set_y
+
 ################## TESTS ###############################
 def test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
@@ -111,6 +148,13 @@ def test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
     print("Shape of X_test: {}".format(X_test.shape))
     print("Shape of Y_train: {}".format(Y_train.shape))
     print("Shape of Y_test: {}".format(Y_test.shape))
+    print(X_train[:10])
+    print(X_test[:10])
+    print(Y_train[0,0,:10])
+    print(Y_test[0,0,:10])
+    
+    X_train, Y_train, X_test, Y_test = normalize_data(X_train, Y_train, X_test, \
+            Y_test, inc_prss = inc_prss)
     print(X_train[:10])
     print(X_test[:10])
     print(Y_train[0,0,:10])
