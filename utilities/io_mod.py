@@ -42,13 +42,12 @@ def get_y_vec(datadir, Y, buff, zF, zC, tid_vec, prof_ids, navg = 1):
         Y[n,:,:] = buff
     return Y
 
-def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test,\
+def load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, x_tid_vec_test,\
         y_tid_vec_train, y_tid_vec_test, inc_prss = True, navg = 1):
     # Inputs:
     #   data_directory  --> directory path where raw data resides
     #   nx, ny, nz      --> number of grid points in computational domain
-    #   zC, zF          --> 1D vectors specifying the z-coordinates for the "Course" ...
-    #                       ... and "Fine" grids respectively
+    #   nzC             --> number of grid points in z for the "Fine grid"
     #   x_tid_vec_test  --> vector of time ID's from the simulation for the training features 
     #   x_tid_vec_train --> "                                             " test features
     #   y_tid_vec_test  --> "                                             " training labels 
@@ -75,6 +74,11 @@ def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test
         prof_id = (0,3,4,5,6,7,8)
     assert len(prof_id) == nprofs
 
+    # Define the low and high resolution computational domains (we actually only need the z-vectors)
+    nzC = nz
+    zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
+    zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
+    
     buff_x = np.empty((nfields,nx,ny,nz), dtype = np.float32, order = 'F')
     buff_y = np.empty((nprofs,nz),        dtype = np.float32, order = 'F')
     
@@ -96,11 +100,11 @@ def load_dataset_V2(data_directory,nx,ny,nz,zF,zC,x_tid_vec_train,x_tid_vec_test
     return train_set_x, train_set_y, test_set_x, test_set_y
 
 ################## TESTS ###############################
-def test_load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
+def test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = True, navg = 1):
     X_train, Y_train, X_test, Y_test = \
-            load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
+            load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = inc_prss, navg = navg)
     print("Shape of X_train: {}".format(X_train.shape))
@@ -123,14 +127,10 @@ if __name__ == '__main__':
     Ly = 3.*pi
     Lz = 1.
 
-    zC = setup_domain_1D(0.5*Lz/nz , Lz - 0.5*Lz/nz , Lz/nz)
-    zF = setup_domain_1D(0.5*Lz/nzF, Lz - 0.5*Lz/nzF, Lz/nzF)
-    print(zF[:3])
-
     x_tid_vec_test = np.array([179300])
     x_tid_vec_train = np.array([179300])
     y_tid_vec_test = np.array([25400])
     y_tid_vec_train = np.array([25400])
-    test_load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
+    test_load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = False, navg = 840)

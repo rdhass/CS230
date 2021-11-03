@@ -392,9 +392,6 @@ if __name__ == "__main__":
     Ly = 3.*pi
     Lz = 1.
     
-    # Define the low and high resolution computational domains (we actually only need the z-vectors)
-    zC = setup_domain_1D(Lz/nzC*0.5, Lz - Lz/nzC*0.5, Lz/nzC)
-    zF = setup_domain_1D(Lz/nzF*0.5, Lz - Lz/nzF*0.5, Lz/nzF)
 
     # Loss function parameters
     lambda_p = sys.argv[2]
@@ -415,7 +412,7 @@ if __name__ == "__main__":
     # Load the data (this uses a function already written from CS230)
     #X_train_orig, Y_train_orig, X_test_orig, Y_test_orig, classes = load_dataset(data_directory)
     X_train, Y_train, X_test, Y_test = \
-            load_dataset_V2(data_directory, nx, ny, nz, zF, zC, x_tid_vec_train, \
+            load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, \
             x_tid_vec_test, y_tid_vec_train, y_tid_vec_test, \
             inc_prss = False, nsteps_avg = navg)
 
