@@ -103,7 +103,7 @@ def load_dataset_V2(data_directory, nx, ny, nz, nzF, x_tid_vec_train, x_tid_vec_
 
 def normalize_data(train_set_x, train_set_y, test_set_x, test_set_y, inc_prss = True):
     ncube = params.nx*params.ny*params.nzC
-    vel_scale = params.utau/params.Uinf
+    vel_scale = 1./params.Uinf
     vel_scale_sq = vel_scale**2.
 
     # Confirm input array dimensions
