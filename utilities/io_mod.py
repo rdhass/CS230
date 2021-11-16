@@ -124,6 +124,7 @@ def normalize_data(train_set_x, train_set_y, test_set_x, test_set_y, inc_prss = 
     assert test_set_y.shape[2] == params.nzC
 
     train_set_x[:,:ncube*3] = train_set_x[:,:ncube*3] * vel_scale
+    #train_set_x[:,:3,:,:,:] = train_set_x[:,:ncube*3] * vel_scale
     train_set_y[:,0,:] = train_set_y[:,0,:] * vel_scale
     train_set_y[:,1:7,:] = train_set_y[:,1:7,:] * vel_scale_sq
     
