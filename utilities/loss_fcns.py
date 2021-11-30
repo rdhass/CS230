@@ -23,7 +23,7 @@ class Loss:
         self.inc_mom = inc_mom
         if self.inc_mom:
             self.nprofs = 14
-            self.nvars = 4
+            self.nvars = 10 # u, v, w, p, tau11, tau12, tau13, tau22, tau23, tau33
         else:
             self.nprofs = 7
             self.nvars = 3
@@ -41,7 +41,13 @@ class Loss:
         self.fields["u2"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
         self.fields["u3"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
         if self.inc_mom:
-            self.fields["p"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["p"]     = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau11"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau12"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau13"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau22"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau23"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
+            self.fields["tau33"] = tf.zeros((n_examples,nx,ny,nzC), dtype = tf.float32)  
 
         # Allocate memory for the current state
         current_state = tf.zeros((n_examples,self.nprofs,nzC), dtype = tf.float32)
@@ -67,37 +73,38 @@ class Loss:
     def L_mom(self):
         # Compute the residual of the pressure Poisson equations
         
-        # tauij[:,:,:,0] --> tau_11
-        # tauij[:,:,:,1] --> tau_12
-        # tauij[:,:,:,2] --> tau_13
-        # tauij[:,:,:,3] --> tau_22
-        # tauij[:,:,:,4] --> tau_23
-        # tauij[:,:,:,5] --> tau_33
-    
-#        Inertial_term = self.dop.ddx(self.dop.ddx( self.u*self.u ) ) +\
-#                 2.*self.dop.ddx(self.dop.ddy( self.u*self.v ) ) +\
-#                 2.*self.dop.ddx(self.dop.ddz( self.u*self.w ) ) +\
-#                    self.dop.ddy(self.dop.ddy( self.v*self.v ) ) +\
-#                 2.*self.dop.ddy(self.dop.ddz( self.v*self.w ) ) +\
-#                    self.dop.ddz(self.dop.ddz( self.w*self.w ) )
-#        Pressure_term = self.dop.ddx(self.dop.ddx(self.p)) + \
-#           self.dop.ddy(self.dop.ddy(self.p)) + self.dop.ddz(self.dop.ddz(self.p))
-#        Stress_term   = self.dop.ddx(self.dop.ddx(self.tauij[:,:,:,0])) + \
-#                     2.*self.dop.ddx(self.dop.ddy(self.tauij[:,:,:,1])) + \
-#                     2.*self.dop.ddx(self.dop.ddz(self.tauij[:,:,:,2])) + \
-#                        self.dop.ddy(self.dop.ddy(self.tauij[:,:,:,3])) + \
-#                     2.*self.dop.ddy(self.dop.ddz(self.tauij[:,:,:,4])) + \
-#                        self.dop.ddz(self.dop.ddz(self.tauij[:,:,:,5]))     
-    
-#        return self.mean_square(Inertial_term + Pressure_term + Stress_term)
-        return None
+        Inertial_term = self.dop.ddx_pointed(self.dop.ddx_pointed( self.fields['u1']*self.fields['u1'] ) ) +\
+                     2.*self.dop.ddx_pointed(self.dop.ddy_pointed( self.fields['u1']*self.fields['u2'] ) ) +\
+                     2.*self.dop.ddx_pointed(self.dop.ddz_pointed( self.fields['u1']*self.fields['u3'] ) ) +\
+                        self.dop.ddy_pointed(self.dop.ddy_pointed( self.fields['u2']*self.fields['u2'] ) ) +\
+                     2.*self.dop.ddy_pointed(self.dop.ddz_pointed( self.fields['u2']*self.fields['u3'] ) ) +\
+                        self.dop.ddz_pointed(self.dop.ddz_pointed( self.fields['u3']*self.fields['u3'] ) )
+
+        Pressure_term = self.dop.ddx_pointed(self.dop.ddx_pointed(self.fields['p'])) + \
+                        self.dop.ddy_pointed(self.dop.ddy_pointed(self.fields['p'])) + \
+                        self.dop.ddz_pointed(self.dop.ddz_pointed(self.fields['p']))
+
+        Stress_term   = self.dop.ddx_pointed(self.dop.ddx_pointed(self.fields['tau11'])) + \
+                     2.*self.dop.ddx_pointed(self.dop.ddy_pointed(self.fields['tau12'])) + \
+                     2.*self.dop.ddx_pointed(self.dop.ddz_pointed(self.fields['tau13'])) + \
+                        self.dop.ddy_pointed(self.dop.ddy_pointed(self.fields['tau22'])) + \
+                     2.*self.dop.ddy_pointed(self.dop.ddz_pointed(self.fields['tau23'])) + \
+                        self.dop.ddz_pointed(self.dop.ddz_pointed(self.fields['tau33']))     
+   
+        return self.mean_square(Inertial_term + Pressure_term + Stress_term)
     
     def set_fields(self,Yhat):
         self.fields['u1'] = Yhat[:,0,:,:,:]
         self.fields['u2'] = Yhat[:,1,:,:,:]
         self.fields['u3'] = Yhat[:,2,:,:,:]
         if self.inc_mom:
-            self.fields['p'] = Yhat[:,3,:,:,:]
+            self.fields['p']     = Yhat[:,3,:,:,:]
+            self.fields['tau11'] = Yhat[:,4,:,:]
+            self.fields['tau12'] = Yhat[:,5,:,:]
+            self.fields['tau13'] = Yhat[:,6,:,:]
+            self.fields['tau22'] = Yhat[:,7,:,:]
+            self.fields['tau23'] = Yhat[:,8,:,:]
+            self.fields['tau33'] = Yhat[:,9,:,:]
     
         return None
     
@@ -121,7 +128,28 @@ class Loss:
 
         if self.inc_mom:
             # TODO: Needs to be implemented
-            None
+            self.current_state = tf.transpose( tf.stack([\
+                    self.xy_avg(self.fields['u1']),\
+                    self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u1'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u1'])), \
+                    self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u2'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u2'])), \
+                    self.xy_avg(tf.math.multiply(self.fields['u1'],self.fields['u3'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u1']),self.xy_avg(self.fields['u3'])), \
+                    self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u2'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u2'])), \
+                    self.xy_avg(tf.math.multiply(self.fields['u2'],self.fields['u3'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u2']),self.xy_avg(self.fields['u3'])), \
+                    self.xy_avg(tf.math.multiply(self.fields['u3'],self.fields['u3'])) - \
+                            tf.math.multiply(self.xy_avg(self.fields['u3']),self.xy_avg(self.fields['u3'])), \
+                    self.xy_avg(self.fields['tau11']),\
+                    self.xy_avg(self.fields['tau12']),\
+                    self.xy_avg(self.fields['tau13']),\
+                    self.xy_avg(self.fields['tau22']),\
+                    self.xy_avg(self.fields['tau23']),\
+                    self.xy_avg(self.fields['tau33']),\
+                    self.xy_avg(self.fields['p'])],\
+                    ), perm = [1,0,2] )
         return None
 
     def MSE(self,Y):
@@ -148,6 +176,9 @@ class Loss:
         #                  ... relative importance of the residual stress ...
         #                  ... in the content loss.
         #                  Type: np.float32
+        # TODO: Incorporate lambda_tau. Right now the SGS stress loss is not ...
+        #       weighted due to the challenges of scaling only a portion of a ...
+        #       tf tensor (i.e. Y[:,7:-1,:] = sqrt(lambda_p)*Y[:,7:-1,:])
 
         nx,ny,nz = self.nx, self.ny, self.nz
         m = tf.shape(Yhat)[0] 
@@ -159,7 +190,6 @@ class Loss:
         assert ny == tf.shape(Yhat)[3]
         assert nzC == tf.shape(Yhat)[4]
 
-        assert m == tf.shape(Y)[0]
         assert self.nprofs == tf.shape(Y)[1]
         assert nzC == tf.shape(Y)[2]
        
@@ -184,10 +214,28 @@ def load_data_for_loss_tests(datadir,tidx,tidy,navg,inc_prss = False):
     tidx_vec = np.array([tidx])
     tidy_vec = np.array([tidy])
     
-    Yhat, Y, _, _ = load_dataset_V2(datadir, nx, ny, nzC, nzF, tidx_vec, \
-            tidx_vec, tidy_vec, tidy_vec, inc_prss = inc_prss, navg = navg)
-   
-    Yhat = Yhat.reshape((1,3,nx,ny,nzC), order = 'F')
+    if inc_prss:
+        _, Y, _, _ = load_dataset_V2(datadir, nx, ny, nzC, nzF, tidx_vec, \
+                tidx_vec, tidy_vec, tidy_vec, inc_prss = inc_prss, navg = navg)
+        Yhat = np.empty((1,10,nx,ny,nzC), dtype = np.float32)
+        tidx = 17000
+        fname = datadir + 'Run01_filt_t' + str(tidx).zfill(6) + '.h5'
+
+        Yhat[:,0,:,:,:] = read_fortran_data(fname,'uVel')
+        Yhat[:,1,:,:,:] = read_fortran_data(fname,'vVel')
+        Yhat[:,2,:,:,:] = read_fortran_data(fname,'wVel')
+        Yhat[:,3,:,:,:] = read_fortran_data(fname,'prss')
+        Yhat[:,4,:,:,:] = read_fortran_data(fname,'tau11')
+        Yhat[:,5,:,:,:] = read_fortran_data(fname,'tau12')
+        Yhat[:,6,:,:,:] = read_fortran_data(fname,'tau13')
+        Yhat[:,7,:,:,:] = read_fortran_data(fname,'tau22')
+        Yhat[:,8,:,:,:] = read_fortran_data(fname,'tau23')
+        Yhat[:,9,:,:,:] = read_fortran_data(fname,'tau33')
+    else:
+        Yhat, Y, _, _ = load_dataset_V2(datadir, nx, ny, nzC, nzF, tidx_vec, \
+                tidx_vec, tidy_vec, tidy_vec, inc_prss = inc_prss, navg = navg)
+        Yhat = Yhat.reshape((1,3,nx,ny,nzC), order = 'F')
+    
     Y = tf.cast(Y, tf.float32)
     Yhat = tf.cast(Yhat, tf.float32)
     return Y, Yhat
@@ -210,18 +258,25 @@ if __name__ == '__main__':
     Y, Yhat = load_data_for_loss_tests(datadir,tidx,tidy,navg,\
             inc_prss = False)
     
-    # Create placeholders for tf operations
     # Load data into Loss class
     L_test = Loss(1,inc_mom = False)
     L_test.set_fields(Yhat)
     L_test.compute_averages()
     Lphys = L_test.L_mass()
     Lcont = L_test.Lcontent(Y)
-    #code.interact(local=locals())
     
     # TODO: Plot some ground-truth profiles to confirm proper initialization of the class
 
 ###### For final project ######
+    Y, Yhat = load_data_for_loss_tests(datadir,tidx,tidy,navg,inc_prss = True)
+    L_test = Loss(1,inc_mom = True)
+    L_test.set_fields(Yhat)
+    #code.interact(local=locals())
+    L_test.compute_averages()
+    Lmass = L_test.L_mass()
+    Lmom  = L_test.L_mom()
+    print('Lmom = {} | Expected output: {}'.format(Lmom,3.027846330297548e+04))
+    Lcont = L_test.Lcontent(Y)
     # Test L_P
     
     # Test L_tauij
